@@ -53,12 +53,20 @@
   .icon-btn svg { width: 22px; height: 22px; stroke: var(--text); }
 
   /* ── 카메라 ── */
-  .cam { grid-area: cam; position: relative; height: 34dvh; background: #000; overflow: hidden; transition: height .2s ease; touch-action: manipulation; }
+  /* touch-action: none → 두 손가락 벌리기를 페이지 확대가 아니라 카메라 확대로 씀 */
+  .cam { grid-area: cam; position: relative; height: 34dvh; background: #000; overflow: hidden; transition: height .2s ease; touch-action: none; }
   .cam.small { height: 16dvh; }
   .cam video { width: 100%; height: 100%; object-fit: contain; display: block; }
   /* 답변한 순간의 사진을 멈춰서 보여줌 */
   .cam .shot { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
   #shotTag { left: 12px; top: 10px; pointer-events: none; }
+  /* 확대·축소: − 1.0× + */
+  .zoom { position: absolute; right: 12px; top: 8px; display: flex; align-items: center; border-radius: 999px;
+    background: rgba(0,0,0,.55); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+  .zoom button { border: 0; background: transparent; color: #fff; height: 38px; }
+  .zoom .zb { width: 42px; font-size: 22px; font-weight: 500; line-height: 1; }
+  .zoom .zv { min-width: 46px; padding: 0 2px; font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .zoom button:active { background: rgba(255,255,255,.15); border-radius: 999px; }
   .cam .flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
   .cam .flash.on { animation: flash .25s ease-out; }
   @keyframes flash { from { opacity: .35; } to { opacity: 0; } }
@@ -104,7 +112,7 @@
   .nextbar { grid-area: next; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: var(--bg); }
   .next { width: 100%; height: 58px; border: 0; border-radius: 14px; background: var(--accent); color: var(--accent-ink); font-size: 19px; font-weight: 750; }
   .next:active { transform: scale(.98); }
-  #app.frozen .meter, #app.frozen #btnAuto, #app.frozen .shutter { display: none; }
+  #app.frozen .meter, #app.frozen #btnAuto, #app.frozen .shutter, #app.frozen .zoom { display: none; }
   #app:not(.frozen) .shot, #app:not(.frozen) #shotTag, #app:not(.frozen) .nextbar { display: none; }
 
   /* ── 설정 ── */
@@ -163,6 +171,11 @@
     <div class="flash" id="flash"></div>
     <span class="chip" id="shotTag">답변한 화면</span>
     <button class="chip" id="btnAuto" aria-pressed="true">자동 읽기</button>
+    <div class="zoom" id="zoomBox">
+      <button class="zb" id="btnZoomOut" aria-label="축소">−</button>
+      <button class="zv" id="zoomVal" aria-label="원래 크기로">1.0×</button>
+      <button class="zb" id="btnZoomIn" aria-label="확대">+</button>
+    </div>
     <div class="meter" title="화면 변화량 (노란 선을 넘으면 새 문제로 판단)"><i id="meterFill"></i><b></b></div>
     <button class="chip" id="btnCamSize">미리보기 작게</button>
     <button class="shutter" id="btnShoot" aria-label="지금 답변">답변</button>
@@ -247,11 +260,12 @@
     <label class="field">
       <span>보내는 사진 크기</span>
       <select id="inRes">
+        <option value="2576">2576px · 최고 화질 (권장)</option>
+        <option value="2048">2048px · 선명</option>
+        <option value="1600">1600px · 보통</option>
         <option value="1280">1280px · 가장 빠름</option>
-        <option value="1600">1600px · 균형 (권장)</option>
-        <option value="2048">2048px · 작은 글씨용</option>
       </select>
-      <small>클수록 작은 글씨를 잘 읽지만 전송과 처리가 느려져요.</small>
+      <small>최고 화질은 Claude가 줄이지 않고 받는 가장 큰 크기예요. 작은 글씨를 가장 잘 읽지만, 1600px보다 전송이 조금 느리고 사진 비용이 2~3배 들어요. <span id="camRes"></span></small>
     </label>
 
     <label class="field">
@@ -300,7 +314,9 @@ const TONES = {
   polite: "옆에서 친절하게 알려주듯 부드러운 존댓말(해요체)로 말한다. 예: 이건 3번, '회의가 연기됐다'예요. 마지막 문장에 회의를 다음 주로 미뤘다고 나오거든요.",
 };
 const EFFORTS = ["low", "medium", "high"];
-const DEFAULTS = { model: "opus", preset: "brief", tone: "casual", custom: "", effort: "medium", auto: true, sens: 6, res: 1600, font: 20, camSmall: false };
+const DEFAULTS = { v: 2, model: "opus", preset: "brief", tone: "casual", custom: "", effort: "medium", auto: true, sens: 6, res: 2576, font: 20, camSmall: false, zoom: 1 };
+// Claude가 줄이지 않고 그대로 받는 가장 큰 사진: 긴 변 2576px, 약 375만 화소
+const MAX_EDGE = 2576, MAX_PIXELS = 3_700_000;
 const SYSTEM_BASE = [
   "너는 옆자리에 앉아서 노트북 화면 속 문제를 같이 보고 답을 말로 알려주는 사람이다. 입력 이미지는 휴대폰 카메라로 노트북 화면을 찍은 사진이다.",
   "화면 속 문제(질문)와 그 문제에 딸린 지문·보기·표·그림을 찾아 읽는다. 메뉴, 탭, 주소창, 작업 표시줄, 버튼, 반사광, 화면 밖 물체는 무시한다.",
@@ -320,13 +336,17 @@ const store = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
   set(k, v) { try { localStorage.setItem(k, v); } catch {} },
 };
-let settings = { ...DEFAULTS, ...(JSON.parse(store.get("ct.settings") || "{}") || {}) };
+let savedSettings = {};
+try { savedSettings = JSON.parse(store.get("ct.settings") || "{}") || {}; } catch {}
+let settings = { ...DEFAULTS, ...savedSettings };
 if (!MODELS[settings.model]) settings.model = DEFAULTS.model;
 if (!PRESETS[settings.preset] && settings.preset !== "custom") settings.preset = DEFAULTS.preset; // 예전 번역 설정은 답변 방식으로 바꿈
 if (!EFFORTS.includes(settings.effort)) settings.effort = DEFAULTS.effort;
 if (!TONES[settings.tone]) settings.tone = DEFAULTS.tone;
 let apiKey = store.get("ct.key") || "";
 const saveSettings = () => store.set("ct.settings", JSON.stringify(settings));
+if ((savedSettings.v || 0) < 2) { settings.res = MAX_EDGE; settings.v = 2; saveSettings(); } // 예전에 저장된 사진 크기도 최고 화질로 올림
+if (!(settings.zoom > 0)) settings.zoom = 1;
 
 /* ───────── DOM ───────── */
 const $ = (id) => document.getElementById(id);
@@ -379,13 +399,15 @@ async function warmUp() {
 
 /* ───────── 카메라 ───────── */
 let mediaStream = null, wakeLock = null, loopTimer = null;
+// 후면 카메라를 4K로 요청 (기기가 못 하면 낼 수 있는 가장 큰 해상도). zoom: true는 기기 줌을 쓰기 위한 권한 요청
+async function openCamera() {
+  const video = { facingMode: { ideal: "environment" }, width: { ideal: 3840 }, height: { ideal: 2160 } };
+  try { return await navigator.mediaDevices.getUserMedia({ audio: false, video: { ...video, zoom: true } }); }
+  catch { return await navigator.mediaDevices.getUserMedia({ audio: false, video }); } // 줌 권한 때문에 실패하면 줌 없이 다시
+}
 async function startCamera() {
   try {
-    const s = await navigator.mediaDevices.getUserMedia({
-      audio: false,
-      video: { facingMode: { ideal: "environment" }, width: { ideal: 2560 }, height: { ideal: 1440 } },
-    });
-    await useStream(s);
+    await useStream(await openCamera());
   } catch (err) {
     setStatus("error", "카메라 오류");
     out.innerHTML = "";
@@ -402,6 +424,7 @@ async function useStream(s) {
   video.srcObject = s;
   await video.play().catch(() => {});
   $("startOverlay").hidden = true;
+  await tuneTrack(s.getVideoTracks()[0]);
   resetDetector();
   goLive();
   requestWakeLock();
@@ -409,6 +432,44 @@ async function useStream(s) {
   startLoop();
   if (!apiKey) openSettings("답변을 받으려면 API 키를 넣어주세요.");
 }
+// 초점은 계속 자동으로 맞추고, 기기 줌이 있으면 그걸 쓰고 없으면 가운데를 잘라 확대(디지털 줌)
+async function tuneTrack(track) {
+  const caps = track?.getCapabilities?.() || {};
+  if (caps.focusMode?.includes("continuous")) { try { await track.applyConstraints({ advanced: [{ focusMode: "continuous" }] }); } catch {} }
+  zoomCfg = caps.zoom && caps.zoom.max > caps.zoom.min
+    ? { hw: true, min: caps.zoom.min, max: Math.min(caps.zoom.max, 10), step: caps.zoom.step || 0.1 }
+    : { hw: false, min: 1, max: 4, step: 0.01 };
+  applyZoom(settings.zoom);
+  lastZoomAt = 0;
+}
+
+/* ───────── 확대·축소 ───────── */
+let zoomCfg = { hw: false, min: 1, max: 4, step: 0.01 }, zoom = 1, lastZoomAt = 0, zoomBusy = false, zoomWant = null, zoomSaveT = 0;
+function applyZoom(z) {
+  z = Math.min(zoomCfg.max, Math.max(zoomCfg.min, z));
+  if (Math.abs(z - 1) < 0.05 && zoomCfg.min <= 1) z = 1; // 1배 근처면 딱 1배로
+  z = Math.round(z / zoomCfg.step) * zoomCfg.step;
+  zoom = z; settings.zoom = z; lastZoomAt = performance.now();
+  $("zoomVal").textContent = (z < 10 ? z.toFixed(1) : Math.round(z)) + "×";
+  if (zoomCfg.hw) { video.style.transform = ""; zoomWant = z; pushHwZoom(); }
+  else video.style.transform = z > 1 ? "scale(" + z + ")" : "";
+  clearTimeout(zoomSaveT); zoomSaveT = setTimeout(saveSettings, 400);
+}
+async function pushHwZoom() { // 두 손가락으로 움직이는 동안 요청이 쌓이지 않게 마지막 값만 적용
+  if (zoomBusy) return; zoomBusy = true;
+  while (zoomWant != null) {
+    const z = zoomWant; zoomWant = null;
+    try { await mediaStream?.getVideoTracks()[0]?.applyConstraints({ advanced: [{ zoom: z }] }); } catch {}
+  }
+  zoomBusy = false;
+}
+// 디지털 줌일 때 화면에 보이는 가운데 영역 (읽기·감지 모두 이 영역만 씀)
+function cropRect(vw, vh) {
+  if (zoomCfg.hw || zoom <= 1) return { x: 0, y: 0, w: vw, h: vh };
+  const w = vw / zoom, h = vh / zoom;
+  return { x: (vw - w) / 2, y: (vh - h) / 2, w, h };
+}
+
 async function requestWakeLock() {
   try { wakeLock = await navigator.wakeLock?.request("screen"); } catch {}
 }
@@ -489,7 +550,8 @@ function boxBlur(src, dst, r) { // 분리형 박스 블러 (가로 → 세로)
 function readDetail() {
   if (video.readyState < 2 || !video.videoWidth) return null;
   ensureSize();
-  sigCtx.drawImage(video, 0, 0, SW, SH);
+  const c = cropRect(video.videoWidth, video.videoHeight);
+  sigCtx.drawImage(video, c.x, c.y, c.w, c.h, 0, 0, SW, SH);
   const px = sigCtx.getImageData(0, 0, SW, SH).data, n = SW * SH;
   for (let i = 0, j = 0; i < n; i++, j += 4) gBuf[i] = px[j] * 0.299 + px[j + 1] * 0.587 + px[j + 2] * 0.114;
   boxBlur(gBuf, b1, 1); boxBlur(gBuf, b2, 4);
@@ -536,6 +598,7 @@ function tick() {
   if (frozen) return; // 답변한 화면에서 멈춘 동안은 아무것도 읽지 않음 ('다음 문제'를 눌러야 다시 읽음)
   if (dot.dataset.s === "watch") statusText.textContent = waitText() + (shaky ? " · 흔들림 큼" : "");
   if (!settings.auto || !apiKey) return;
+  if (now - lastZoomAt < 1200) return; // 확대·축소하는 중에는 읽지 않음 (다 맞추고 나서 읽음)
   if (dirty && !recheck && !busy() && dot.dataset.s !== "detect" && dot.dataset.s !== "error") setStatus("detect", "변화 감지");
   if (dirty && stableMs >= STABLE_MS && now - lastSendAt > (shaky ? 2500 : 900)) {
     const sameT = Math.max(0.022, Math.min(base * 1.8, 0.16));
@@ -553,11 +616,14 @@ const capCanvas = document.createElement("canvas"), capCtx = capCanvas.getContex
 const thumbCanvas = document.createElement("canvas"), thumbCtx = thumbCanvas.getContext("2d");
 function captureFrame() {
   const vw = video.videoWidth, vh = video.videoHeight; if (!vw) return null;
-  const scale = Math.min(1, settings.res / Math.max(vw, vh));
-  const w = Math.round(vw * scale), h = Math.round(vh * scale);
+  const c = cropRect(vw, vh); // 확대해서 보이는 부분만 보냄
+  // 설정한 크기와 Claude가 그대로 받는 한도 중 작은 쪽에 맞춤 (원본보다 키우지는 않음)
+  const scale = Math.min(1, settings.res / Math.max(c.w, c.h), Math.sqrt(MAX_PIXELS / (c.w * c.h)));
+  const w = Math.round(c.w * scale), h = Math.round(c.h * scale);
   capCanvas.width = w; capCanvas.height = h;
-  capCtx.drawImage(video, 0, 0, w, h);
-  const url = capCanvas.toDataURL("image/jpeg", 0.82);
+  capCtx.imageSmoothingQuality = "high";
+  capCtx.drawImage(video, c.x, c.y, c.w, c.h, 0, 0, w, h);
+  const url = capCanvas.toDataURL("image/jpeg", 0.92); // 작은 글씨가 뭉개지지 않게 압축을 덜 함
   thumbCanvas.width = 128; thumbCanvas.height = Math.round(128 * h / w);
   thumbCtx.drawImage(capCanvas, 0, 0, thumbCanvas.width, thumbCanvas.height);
   const b64 = url.slice(url.indexOf(",") + 1);
@@ -760,6 +826,9 @@ function openSettings(notice = "") {
   $("inAuto").checked = settings.auto; $("inSens").value = settings.sens; $("sensVal").textContent = settings.sens;
   $("inRes").value = String(settings.res); $("inFont").value = settings.font; $("fontVal").textContent = settings.font + "px";
   $("costVal").textContent = fmtUSD(sessionCost);
+  $("camRes").textContent = video.videoWidth
+    ? "지금 카메라: " + video.videoWidth + "×" + video.videoHeight + (zoomCfg.hw ? " · 기기 줌 사용" : zoom > 1 ? " · 화면 확대 중이라 가운데만 잘라 보냄 (휴대폰을 가까이 두면 더 선명해요)" : "")
+    : "";
   if (!dlg.open) dlg.showModal();
 }
 $("inPreset").addEventListener("change", (e) => { $("inCustom").hidden = e.target.value !== "custom"; });
@@ -804,7 +873,30 @@ function applySettings() {
 /* ───────── 버튼 ───────── */
 $("btnStart").addEventListener("click", startCamera);
 $("btnSettings").addEventListener("click", () => openSettings());
-$("cam").addEventListener("click", (e) => { if (!frozen && (e.target === video || e.target.id === "cam" || e.target.id === "flash")) trigger(); });
+$("cam").addEventListener("click", (e) => {
+  if (performance.now() - pinch.endAt < 500) return; // 두 손가락 확대 직후 손을 뗀 건 탭으로 치지 않음
+  if (!frozen && (e.target === video || e.target.id === "cam" || e.target.id === "flash")) trigger();
+});
+// 확대·축소 버튼 (가운데 배율을 누르면 원래 크기로)
+const noBubble = (fn) => (e) => { e.stopPropagation(); fn(); };
+$("btnZoomIn").addEventListener("click", noBubble(() => applyZoom(zoom * 1.25)));
+$("btnZoomOut").addEventListener("click", noBubble(() => applyZoom(zoom / 1.25)));
+$("zoomVal").addEventListener("click", noBubble(() => applyZoom(1)));
+// 두 손가락으로 벌리면 확대, 오므리면 축소
+const pinch = { on: false, d0: 1, z0: 1, endAt: 0 };
+const fingerGap = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY) || 1;
+$("cam").addEventListener("touchstart", (e) => {
+  if (e.touches.length !== 2 || frozen || !mediaStream) return;
+  e.preventDefault(); pinch.on = true; pinch.d0 = fingerGap(e.touches); pinch.z0 = zoom;
+}, { passive: false });
+$("cam").addEventListener("touchmove", (e) => {
+  if (!pinch.on || e.touches.length !== 2) return;
+  e.preventDefault(); applyZoom(pinch.z0 * fingerGap(e.touches) / pinch.d0);
+}, { passive: false });
+const pinchEnd = (e) => { if (pinch.on && e.touches.length < 2) { pinch.on = false; pinch.endAt = performance.now(); } };
+$("cam").addEventListener("touchend", pinchEnd);
+$("cam").addEventListener("touchcancel", pinchEnd);
+$("cam").addEventListener("gesturestart", (e) => e.preventDefault()); // 아이폰 사파리의 페이지 확대 막기
 $("btnShoot").addEventListener("click", (e) => { e.stopPropagation(); trigger(); });
 $("btnNext").addEventListener("click", nextProblem);
 $("btnAuto").addEventListener("click", (e) => {
@@ -816,7 +908,7 @@ $("btnCamSize").addEventListener("click", (e) => { e.stopPropagation(); settings
 applySettings();
 setStatus("idle", "시작 전");
 // 개발자 도구에서 테스트용으로만 사용
-window.app = { useStream, trigger, nextProblem, dbg, get settings() { return settings; }, get compat() { return compat; }, get frozen() { return frozen; } };
+window.app = { useStream, trigger, nextProblem, applyZoom, captureFrame, dbg, get zoom() { return zoom; }, get zoomCfg() { return zoomCfg; }, get settings() { return settings; }, get compat() { return compat; }, get frozen() { return frozen; } };
 </script>
 </body>
 </html>
