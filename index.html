@@ -399,15 +399,77 @@ async function warmUp() {
 
 /* ───────── 카메라 ───────── */
 let mediaStream = null, wakeLock = null, loopTimer = null;
+/* 카메라 멈춤 대비
+   다른 앱에 갔다 오거나 화면이 꺼졌다 켜지면 폰이 카메라를 끊어서 영상이 마지막 장면에 멈출 수 있다.
+   - 새 장면이 들어오는지 계속 확인(lastFrameAt)하고, 1.5초 넘게 안 들어오면 카메라를 다시 켠다
+   - 답변을 누를 때 영상이 멈춰 있으면 옛날 장면을 보내지 않고, 다시 켠 뒤 새로 찍는다
+   - 다시 켜도 금방 또 멈추면 안전 모드(1080p, 기기 줌·초점 조정 안 함)로 켠다 */
+const STALL_MS = 1500, FRESH_MS = 700;
+let isCamera = false, lastFrameAt = 0, camStartedAt = 0, restarting = false, pendingShot = false;
+let camSafe = false, lastRestartAt = -1e9, lastHiddenAt = -1e9, frameSum = NaN, frameCbOn = false;
 // 후면 카메라를 4K로 요청 (기기가 못 하면 낼 수 있는 가장 큰 해상도). zoom: true는 기기 줌을 쓰기 위한 권한 요청
 async function openCamera() {
-  const video = { facingMode: { ideal: "environment" }, width: { ideal: 3840 }, height: { ideal: 2160 } };
+  const video = camSafe
+    ? { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } }
+    : { facingMode: { ideal: "environment" }, width: { ideal: 3840 }, height: { ideal: 2160 } };
+  if (camSafe) return await navigator.mediaDevices.getUserMedia({ audio: false, video });
   try { return await navigator.mediaDevices.getUserMedia({ audio: false, video: { ...video, zoom: true } }); }
   catch { return await navigator.mediaDevices.getUserMedia({ audio: false, video }); } // 줌 권한 때문에 실패하면 줌 없이 다시
 }
+// 새 장면이 화면에 올라올 때마다 시각 기록 (지원하는 브라우저만. 나머지는 tick에서 픽셀 변화로 확인)
+function watchFrames() {
+  if (frameCbOn || !video.requestVideoFrameCallback) return;
+  frameCbOn = true;
+  const cb = () => { lastFrameAt = performance.now(); video.requestVideoFrameCallback(cb); };
+  video.requestVideoFrameCallback(cb);
+}
+async function attachStream(s, camera) {
+  if (mediaStream && mediaStream !== s) mediaStream.getTracks().forEach((t) => t.stop());
+  mediaStream = s; isCamera = camera;
+  video.srcObject = s;
+  await video.play().catch(() => {});
+  const track = s.getVideoTracks()[0];
+  track?.addEventListener("ended", () => { if (mediaStream === s && isCamera) restartCamera(); }); // 폰이 카메라를 끊음
+  await tuneTrack(track);
+  camStartedAt = performance.now(); frameSum = NaN;
+  watchFrames();
+}
+function cameraStalled(now) {
+  if (!isCamera || restarting) return false;
+  const tr = mediaStream?.getVideoTracks()[0];
+  return !tr || tr.readyState === "ended" || now - Math.max(lastFrameAt, camStartedAt) > STALL_MS;
+}
+async function restartCamera() {
+  if (restarting || !isCamera) return;
+  restarting = true;
+  const now = performance.now();
+  // 다시 켠 지 20초 안에 또 멈추면(그사이 다른 앱에 다녀온 게 아니라면) 이 폰은 4K·기기 설정에서 멈추는 것 → 안전 모드
+  if (!camSafe && now - lastRestartAt < 20_000 && lastHiddenAt < lastRestartAt) camSafe = true;
+  lastRestartAt = now;
+  if (!frozen) setStatus("send", "카메라 다시 켜는 중");
+  try {
+    mediaStream?.getTracks().forEach((t) => t.stop());
+    await attachStream(await openCamera(), true);
+  } catch (err) {
+    restarting = false; pendingShot = false;
+    setStatus("error", "카메라 오류");
+    $("startOverlay").hidden = false; // '카메라 시작'을 다시 누를 수 있게
+    return;
+  }
+  prevD = null; base = null; stableMs = 0; // 감지 기준만 새로 잡음 (마지막으로 답한 화면은 기억해서 같은 문제는 다시 안 읽음)
+  restarting = false;
+  if (!frozen && !busy()) showWaiting();
+  if (pendingShot) { // 답변을 눌렀을 때 카메라가 멈춰 있었으면, 새 장면이 들어온 뒤 찍음
+    const t0 = performance.now();
+    while (performance.now() - t0 < 3000 && !(lastFrameAt > t0 + 300)) await new Promise((r) => setTimeout(r, 50));
+    pendingShot = false;
+    if (performance.now() - lastFrameAt <= FRESH_MS) trigger();
+    else { setStatus("error", "카메라가 멈췄어요"); out.textContent = "카메라 영상이 들어오지 않아요. 다른 앱이 카메라를 쓰고 있으면 닫고, 이 페이지를 새로고침해 주세요."; }
+  }
+}
 async function startCamera() {
   try {
-    await useStream(await openCamera());
+    await useStream(await openCamera(), true);
   } catch (err) {
     setStatus("error", "카메라 오류");
     out.innerHTML = "";
@@ -418,13 +480,9 @@ async function startCamera() {
     out.append(e);
   }
 }
-async function useStream(s) {
-  if (mediaStream && mediaStream !== s) mediaStream.getTracks().forEach((t) => t.stop());
-  mediaStream = s;
-  video.srcObject = s;
-  await video.play().catch(() => {});
+async function useStream(s, camera = false) { // camera=false: 사진으로 시험하기처럼 진짜 카메라가 아닌 영상
   $("startOverlay").hidden = true;
-  await tuneTrack(s.getVideoTracks()[0]);
+  await attachStream(s, camera);
   resetDetector();
   goLive();
   requestWakeLock();
@@ -434,7 +492,7 @@ async function useStream(s) {
 }
 // 초점은 계속 자동으로 맞추고, 기기 줌이 있으면 그걸 쓰고 없으면 가운데를 잘라 확대(디지털 줌)
 async function tuneTrack(track) {
-  const caps = track?.getCapabilities?.() || {};
+  const caps = camSafe ? {} : track?.getCapabilities?.() || {}; // 안전 모드에선 기기 설정을 건드리지 않음
   if (caps.focusMode?.includes("continuous")) { try { await track.applyConstraints({ advanced: [{ focusMode: "continuous" }] }); } catch {} }
   zoomCfg = caps.zoom && caps.zoom.max > caps.zoom.min
     ? { hw: true, min: caps.zoom.min, max: Math.min(caps.zoom.max, 10), step: caps.zoom.step || 0.1 }
@@ -474,9 +532,18 @@ async function requestWakeLock() {
   try { wakeLock = await navigator.wakeLock?.request("screen"); } catch {}
 }
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible" && mediaStream) { requestWakeLock(); startLoop(); }
-  else stopLoop();
+  if (document.visibilityState === "visible" && mediaStream) {
+    requestWakeLock();
+    camStartedAt = performance.now(); // 돌아온 직후 영상이 다시 들어올 시간을 줌 (안 들어오면 다시 켬)
+    video.play().catch(() => {});
+    const tr = mediaStream.getVideoTracks()[0];
+    if (isCamera && (!tr || tr.readyState === "ended")) restartCamera();
+    startLoop();
+  }
+  else { stopLoop(); lastHiddenAt = performance.now(); }
 });
+// 아이폰 등에서 영상이 저절로 일시정지되면 다시 재생
+video.addEventListener("pause", () => { if (mediaStream && document.visibilityState === "visible") video.play().catch(() => {}); });
 
 /* ───────── 새 문제 감지 ─────────
    192px 흑백 축소본에서 글자 윤곽(디테일)만 남겨 직전 프레임과 비교한다(손떨림만큼 위치를 맞춘 뒤).
@@ -553,7 +620,10 @@ function readDetail() {
   const c = cropRect(video.videoWidth, video.videoHeight);
   sigCtx.drawImage(video, c.x, c.y, c.w, c.h, 0, 0, SW, SH);
   const px = sigCtx.getImageData(0, 0, SW, SH).data, n = SW * SH;
-  for (let i = 0, j = 0; i < n; i++, j += 4) gBuf[i] = px[j] * 0.299 + px[j + 1] * 0.587 + px[j + 2] * 0.114;
+  let sum = 0;
+  for (let i = 0, j = 0; i < n; i++, j += 4) { gBuf[i] = px[j] * 0.299 + px[j + 1] * 0.587 + px[j + 2] * 0.114; sum += gBuf[i]; }
+  // 진짜 카메라는 미세한 노이즈 때문에 장면마다 픽셀이 조금씩 다름 → 완전히 같으면 영상이 멈춘 것
+  if (sum !== frameSum) { frameSum = sum; lastFrameAt = performance.now(); }
   boxBlur(gBuf, b1, 1); boxBlur(gBuf, b2, 4);
   const d = new Float32Array(n);
   for (let i = 0; i < n; i++) d[i] = b1[i] - b2[i]; // 밝기 변화는 지우고 글자 윤곽만 남김
@@ -580,7 +650,9 @@ function startLoop() { if (!loopTimer && mediaStream) { lastTick = performance.n
 function stopLoop() { clearInterval(loopTimer); loopTimer = null; }
 function tick() {
   const now = performance.now(), dt = now - lastTick; lastTick = now;
-  const d = readDetail(); if (!d) return;
+  const d = readDetail();
+  if (cameraStalled(now)) { restartCamera(); return; } // 영상이 멈췄으면 카메라를 다시 켬
+  if (!d) return;
   const p = prevD; prevD = d;
   if (!p || p.length !== d.length) return;
   const { r, edge } = residual(d, p);
@@ -632,6 +704,12 @@ function captureFrame() {
 function trigger(sig) {
   if (!mediaStream || frozen) return;
   if (!apiKey) { openSettings("답변을 받으려면 API 키를 넣어주세요."); return; }
+  if (isCamera && (restarting || performance.now() - lastFrameAt > FRESH_MS)) {
+    // 영상이 멈춰 있으면 옛날 장면을 보내지 않고, 카메라를 다시 켠 뒤 새로 찍음
+    pendingShot = true;
+    if (!restarting) restartCamera();
+    return;
+  }
   const frame = captureFrame(); if (!frame) return;
   lastSentD = sig || readDetail(); dirty = false; recheck = false;
   lastSendAt = performance.now();
@@ -827,7 +905,7 @@ function openSettings(notice = "") {
   $("inRes").value = String(settings.res); $("inFont").value = settings.font; $("fontVal").textContent = settings.font + "px";
   $("costVal").textContent = fmtUSD(sessionCost);
   $("camRes").textContent = video.videoWidth
-    ? "지금 카메라: " + video.videoWidth + "×" + video.videoHeight + (zoomCfg.hw ? " · 기기 줌 사용" : zoom > 1 ? " · 화면 확대 중이라 가운데만 잘라 보냄 (휴대폰을 가까이 두면 더 선명해요)" : "")
+    ? "지금 카메라: " + video.videoWidth + "×" + video.videoHeight + (camSafe ? " · 카메라가 자꾸 멈춰서 안전 모드(1080p)로 켰어요" : "") + (zoomCfg.hw ? " · 기기 줌 사용" : zoom > 1 ? " · 화면 확대 중이라 가운데만 잘라 보냄 (휴대폰을 가까이 두면 더 선명해요)" : "")
     : "";
   if (!dlg.open) dlg.showModal();
 }
@@ -908,7 +986,7 @@ $("btnCamSize").addEventListener("click", (e) => { e.stopPropagation(); settings
 applySettings();
 setStatus("idle", "시작 전");
 // 개발자 도구에서 테스트용으로만 사용
-window.app = { useStream, trigger, nextProblem, applyZoom, captureFrame, dbg, get zoom() { return zoom; }, get zoomCfg() { return zoomCfg; }, get settings() { return settings; }, get compat() { return compat; }, get frozen() { return frozen; } };
+window.app = { useStream, trigger, nextProblem, applyZoom, captureFrame, dbg, get camSafe() { return camSafe; }, get isCamera() { return isCamera; }, get zoom() { return zoom; }, get zoomCfg() { return zoomCfg; }, get settings() { return settings; }, get compat() { return compat; }, get frozen() { return frozen; } };
 </script>
 </body>
 </html>
