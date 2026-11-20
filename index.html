@@ -35,7 +35,7 @@
 
   #app { height: 100dvh; display: grid; grid-template-rows: auto auto 1fr auto;
     grid-template-areas: "bar" "cam" "result" "next";
-    padding-top: env(safe-area-inset-top); }
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left); } /* 가로로 돌렸을 때 노치에 안 가리게 */
 
   /* ── 상단 상태줄 ── */
   .bar { grid-area: bar; display: flex; align-items: center; gap: 10px; padding: 6px 8px 6px 16px; min-height: 48px; }
@@ -51,17 +51,20 @@
   .icon-btn { width: 44px; height: 44px; border: 0; background: transparent; border-radius: 12px; display: grid; place-items: center; flex: none; }
   .icon-btn:active { background: var(--surface-2); }
   .icon-btn svg { width: 22px; height: 22px; stroke: var(--text); }
+  .bar-btn { border: 1px solid var(--line); background: var(--surface-2); border-radius: 999px; padding: 7px 12px; font-size: 13px; font-weight: 650; flex: none; }
 
   /* ── 카메라 ── */
   /* touch-action: none → 두 손가락 벌리기를 페이지 확대가 아니라 카메라 확대로 씀 */
-  .cam { grid-area: cam; position: relative; height: 34dvh; background: #000; overflow: hidden; transition: height .2s ease; touch-action: none; }
-  .cam.small { height: 16dvh; }
+  .cam { grid-area: cam; position: relative; height: 34dvh; background: #000; overflow: hidden; touch-action: none; }
   .cam video { width: 100%; height: 100%; object-fit: contain; display: block; }
+  /* ✕로 숨기면 화면에서만 안 보이게 하고 카메라는 계속 돌아감 (아예 없애면 폰이 영상을 멈춤) */
+  #app.camoff .cam { position: fixed; right: 0; bottom: 0; width: 32px; height: 18px; opacity: .02; pointer-events: none; }
+  #app.camoff { grid-template-rows: auto 1fr auto; grid-template-areas: "bar" "result" "next"; }
   /* 답변한 순간의 사진을 멈춰서 보여줌 */
   .cam .shot { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
   #shotTag { left: 12px; top: 10px; pointer-events: none; }
   /* 확대·축소: − 1.0× + */
-  .zoom { position: absolute; right: 12px; top: 8px; display: flex; align-items: center; border-radius: 999px;
+  .zoom { position: absolute; left: 12px; bottom: 12px; display: flex; align-items: center; border-radius: 999px;
     background: rgba(0,0,0,.55); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
   .zoom button { border: 0; background: transparent; color: #fff; height: 38px; }
   .zoom .zb { width: 42px; font-size: 22px; font-weight: 500; line-height: 1; }
@@ -74,8 +77,8 @@
     background: rgba(0,0,0,.55); color: #fff; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
   .chip[aria-pressed="true"] { background: rgba(62,207,142,.85); color: #06140d; }
   #btnAuto { left: 12px; top: 10px; }
-  #btnCamSize { left: 12px; bottom: 12px; }
-  .meter { position: absolute; left: 12px; right: 92px; top: 48px; height: 4px; border-radius: 2px; background: rgba(255,255,255,.18); overflow: hidden; }
+  #btnCamOff { right: 10px; top: 8px; width: 40px; height: 40px; padding: 0; font-size: 17px; display: grid; place-items: center; }
+  .meter { position: absolute; left: 12px; right: 60px; top: 50px; height: 4px; border-radius: 2px; background: rgba(255,255,255,.18); overflow: hidden; }
   .meter i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: #fff; transition: width .1s linear; }
   .meter b { position: absolute; left: 50%; top: -2px; bottom: -2px; width: 2px; background: var(--warn); }
   .shutter { position: absolute; right: 14px; bottom: 12px; width: 66px; height: 66px; border-radius: 50%;
@@ -89,14 +92,15 @@
 
   /* ── 결과 ── */
   .result { grid-area: result; overflow-y: auto; -webkit-overflow-scrolling: touch;
-    padding: 16px 16px calc(28px + env(safe-area-inset-bottom)); }
-  .out { font-size: var(--font); line-height: 1.72; white-space: pre-wrap; word-break: keep-all; overflow-wrap: anywhere; min-height: 3em; }
+    padding: 14px 16px calc(14px + env(safe-area-inset-bottom)); }
+  .out { font-size: var(--font); line-height: 1.5; white-space: pre-wrap; word-break: keep-all; overflow-wrap: anywhere; min-height: 3em; }
   .out:empty::before { content: attr(data-placeholder); color: var(--muted); font-size: 16px; }
   .out.streaming::after { content: "▍"; color: var(--accent); animation: blink 1s steps(1) infinite; }
   .out.stale { opacity: .45; } /* 다음 문제를 기다리는 동안 이전 답은 흐리게 */
   @keyframes blink { 50% { opacity: 0; } }
   .out .err { display: block; color: var(--err); font-size: 16px; }
   .meta { margin-top: 12px; color: var(--muted); font-size: 12.5px; line-height: 1.5; font-variant-numeric: tabular-nums; }
+  .meta:empty { display: none; }
   .history { margin-top: 22px; border-top: 1px solid var(--line); padding-top: 10px; }
   .history summary { color: var(--muted); font-size: 14px; padding: 8px 0; list-style: none; }
   .history summary::-webkit-details-marker { display: none; }
@@ -112,8 +116,9 @@
   .nextbar { grid-area: next; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: var(--bg); }
   .next { width: 100%; height: 58px; border: 0; border-radius: 14px; background: var(--accent); color: var(--accent-ink); font-size: 19px; font-weight: 750; }
   .next:active { transform: scale(.98); }
+  #app:not(.frozen) .next { background: var(--surface-2); color: var(--text); border: 1px solid var(--line); } /* 카메라를 숨긴 채 기다릴 때의 '지금 읽기' */
   #app.frozen .meter, #app.frozen #btnAuto, #app.frozen .shutter, #app.frozen .zoom { display: none; }
-  #app:not(.frozen) .shot, #app:not(.frozen) #shotTag, #app:not(.frozen) .nextbar { display: none; }
+  #app:not(.frozen) .shot, #app:not(.frozen) #shotTag, #app:not(.frozen):not(.camoff) .nextbar { display: none; }
 
   /* ── 설정 ── */
   dialog { border: 0; padding: 0; width: 100%; max-width: 560px; max-height: 92dvh; margin: auto auto 0; border-radius: 18px 18px 0 0;
@@ -147,11 +152,17 @@
   .actions { display: flex; gap: 8px; justify-content: flex-end; position: sticky; bottom: 0; margin: 0 -16px; padding: 10px 16px calc(14px + env(safe-area-inset-bottom));
     background: var(--surface); border-top: 1px solid var(--line); }
 
-  /* 가로 화면: 카메라 왼쪽, 답변 오른쪽 */
-  @media (orientation: landscape) and (max-height: 600px) {
-    #app { grid-template-columns: 44% 1fr; grid-template-rows: auto 1fr auto; grid-template-areas: "bar bar" "cam result" "cam next"; }
-    .cam, .cam.small { height: auto; }
-    #btnCamSize { display: none; }
+  /* 가로 화면: 답변 왼쪽, 카메라 오른쪽 */
+  @media (orientation: landscape) {
+    #app { grid-template-columns: 1fr 40%; grid-template-rows: auto 1fr auto; grid-template-areas: "bar bar" "result cam" "next cam"; }
+    .cam { height: auto; }
+    #app.camoff { grid-template-columns: 1fr; grid-template-areas: "bar" "result" "next"; }
+    /* 세로 공간이 좁으니 위아래 줄을 얇게 해서 답변 자리를 넓힘 */
+    .bar { min-height: 40px; padding-top: 0; padding-bottom: 0; }
+    .icon-btn { height: 40px; }
+    .result { padding-top: 8px; padding-bottom: 8px; }
+    .nextbar { padding: 6px 16px calc(6px + env(safe-area-inset-bottom)); }
+    .next { height: 46px; font-size: 17px; }
   }
 </style>
 </head>
@@ -160,6 +171,7 @@
   <header class="bar">
     <div class="status"><span class="dot" id="dot"></span><span id="statusText">시작 전</span></div>
     <div class="metrics" id="metrics"></div>
+    <button class="bar-btn" id="btnCamShow" hidden>카메라 보기</button>
     <button class="icon-btn" id="btnSettings" aria-label="설정">
       <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
     </button>
@@ -177,7 +189,7 @@
       <button class="zb" id="btnZoomIn" aria-label="확대">+</button>
     </div>
     <div class="meter" title="화면 변화량 (노란 선을 넘으면 새 문제로 판단)"><i id="meterFill"></i><b></b></div>
-    <button class="chip" id="btnCamSize">미리보기 작게</button>
+    <button class="chip" id="btnCamOff" aria-label="카메라 화면 숨기기">✕</button>
     <button class="shutter" id="btnShoot" aria-label="지금 답변">답변</button>
     <div class="start" id="startOverlay">
       <button id="btnStart">카메라 시작</button>
@@ -222,8 +234,8 @@
     <label class="field">
       <span>답변 방식</span>
       <select id="inPreset">
-        <option value="brief">답 + 짧은 이유</option>
-        <option value="only">답만</option>
+        <option value="only">답만 (권장)</option>
+        <option value="brief">답 + 한 줄 이유</option>
         <option value="explain">답 + 자세한 풀이</option>
         <option value="custom">직접 입력</option>
       </select>
@@ -236,6 +248,7 @@
         <option value="casual">반말 · 친구처럼</option>
         <option value="polite">존댓말 · 부드럽게</option>
       </select>
+      <small>객관식·단답 같은 짧은 답의 말투예요. 서술형은 그대로 옮겨 낼 수 있는 답안 문체로 써요.</small>
     </label>
 
     <label class="field">
@@ -268,10 +281,14 @@
       <small>최고 화질은 Claude가 줄이지 않고 받는 가장 큰 크기예요. 작은 글씨를 가장 잘 읽지만, 1600px보다 전송이 조금 느리고 사진 비용이 2~3배 들어요. <span id="camRes"></span></small>
     </label>
 
-    <label class="field">
-      <span>글자 크기 <b id="fontVal"></b></span>
-      <input type="range" id="inFont" min="14" max="34" step="1">
-    </label>
+    <div class="field">
+      <div class="switch"><span>답변을 한 화면에 맞추기</span><input type="checkbox" id="inFit"></div>
+      <small>답이 길면 글자를 줄여서 스크롤 없이 한 화면에 다 보이게 해요. 짧은 답은 아래 크기까지 크게 보여요.</small>
+      <label class="field">
+        <small>가장 큰 글자 크기 <b id="fontVal"></b> (카메라 화면을 ✕로 숨기면 1.6배까지 커져요)</small>
+        <input type="range" id="inFont" min="16" max="48" step="1">
+      </label>
+    </div>
 
     <label class="field">
       <span>카메라 대신 사진으로 시험해보기</span>
@@ -304,30 +321,32 @@ const MODELS = {
             thinkingOff: true, price: { in: 0.1, out: 0.5 } },
 };
 const PRESETS = {
-  brief: "답을 먼저 말하고, 왜 그런지 한두 문장으로 짧게 덧붙인다.",
-  only: "답만 한마디로 말한다. 이유나 풀이는 말하지 않는다.",
-  explain: "답을 먼저 말하고, 어떻게 푸는지 옆에서 설명해주듯 차근차근 말로 풀어준다. 객관식이면 다른 보기가 왜 아닌지도 짧게 말해준다.",
+  only: "답만 쓴다. 이유·풀이·설명은 붙이지 않는다.",
+  brief: "답을 먼저 쓰고, 객관식·단답형이면 왜 그런지 한 문장만 덧붙인다. 서술형은 답안만 쓴다.",
+  explain: "답을 먼저 쓰고, 이어서 어떻게 푸는지 차근차근 설명한다. 객관식이면 다른 보기가 왜 아닌지도 짧게 말한다.",
 };
-// 말투: 옆자리 사람이 말로 알려주는 느낌
+// 말투: 객관식·단답 같은 짧은 답에만 적용 (서술형은 답안 문체)
 const TONES = {
-  casual: "친구한테 말하듯 편한 반말로 말한다. 예: 이건 3번, '회의가 연기됐다'야. 마지막 문장에 회의를 다음 주로 미뤘다고 나오거든.",
-  polite: "옆에서 친절하게 알려주듯 부드러운 존댓말(해요체)로 말한다. 예: 이건 3번, '회의가 연기됐다'예요. 마지막 문장에 회의를 다음 주로 미뤘다고 나오거든요.",
+  casual: "객관식·단답형 같은 짧은 답은 친구한테 말하듯 편한 반말로 쓴다. 예: 3번, '회의가 연기됐다'야.",
+  polite: "객관식·단답형 같은 짧은 답은 부드러운 존댓말(해요체)로 쓴다. 예: 3번, '회의가 연기됐다'예요.",
 };
 const EFFORTS = ["low", "medium", "high"];
-const DEFAULTS = { v: 2, model: "opus", preset: "brief", tone: "casual", custom: "", effort: "medium", auto: true, sens: 6, res: 2576, font: 20, camSmall: false, zoom: 1 };
+const DEFAULTS = { v: 3, model: "opus", preset: "only", tone: "casual", custom: "", effort: "medium", auto: true, sens: 6, res: 2576, font: 28, fit: true, camOff: false, zoom: 1 };
 // Claude가 줄이지 않고 그대로 받는 가장 큰 사진: 긴 변 2576px, 약 375만 화소
 const MAX_EDGE = 2576, MAX_PIXELS = 3_700_000;
 const SYSTEM_BASE = [
-  "너는 옆자리에 앉아서 노트북 화면 속 문제를 같이 보고 답을 말로 알려주는 사람이다. 입력 이미지는 휴대폰 카메라로 노트북 화면을 찍은 사진이다.",
+  "너는 노트북 화면 속 문제의 답을 대신 써주는 사람이다. 입력 이미지는 휴대폰 카메라로 노트북 화면을 찍은 사진이다.",
   "화면 속 문제(질문)와 그 문제에 딸린 지문·보기·표·그림을 찾아 읽는다. 메뉴, 탭, 주소창, 작업 표시줄, 버튼, 반사광, 화면 밖 물체는 무시한다.",
-  "지문을 번역하거나 옮겨 적지 말고, 문제를 풀어 답을 한다. 한국어로 말하되, 답 자체가 외국어여야 하는 문제(영작, 빈칸 채우기 등)는 그 답만 그 언어로 쓴다.",
-  "사람이 입으로 말하듯 자연스러운 구어체로 쓴다. AI나 해설지처럼 보이는 글투는 쓰지 않는다:",
-  "- '정답:', '근거:', '해설:', '풀이:' 같은 머리표, 번호 목록, 글머리 기호, 굵은 글씨·# 같은 마크다운 기호를 쓰지 않는다.",
-  "- '따라서', '그러므로', '결론적으로', '해당 ~', '~입니다', '~할 수 있습니다' 같은 딱딱한 글말을 쓰지 않는다.",
-  "- 인사, '좋은 문제네요' 같은 말, 문제를 다시 읊는 말 없이 바로 답부터 말한다.",
-  "객관식이면 '3번'처럼 번호를 말하고, 헷갈리지 않게 보기 내용도 짧게 같이 말한다.",
-  "문제가 여러 개면 '1번은 ~, 2번은 ~'처럼 순서대로 말하고, 문제마다 줄을 바꾼다.",
-  "흐리거나 잘려서 잘 안 보이면 '끝이 잘려서 확실하진 않은데'처럼 한마디 하고, 가장 그럴듯한 답을 말한다.",
+  "지문을 번역하거나 옮겨 적지 말고, 문제를 풀어 답만 쓴다.",
+  "답 말고 다른 말은 한 마디도 하지 않는다. 다음은 모두 금지다:",
+  "- 문제 유형이나 성격 설명. 예: '이건 정답이 있는 문제가 아니라 네 경험으로 쓰는 서술형이야', '정답이 따로 없어'",
+  "- 쓰는 방법 조언이나 가이드. 예: '네 경험을 쓰면 돼', '이런 식으로 쓰면 좋아', '예시 답안이야'",
+  "- 주의사항, 인사, 문제 다시 읊기, 되묻기, '확실하진 않은데' 같은 단서",
+  "서술형·논술형·의견·경험을 묻는 문제도 예외 없이, 그대로 옮겨 적어 낼 수 있는 완성된 답안을 바로 쓴다. 경험을 묻는 문제면 자연스럽고 그럴듯한 경험을 1인칭으로 지어서 쓴다. 답안은 문제가 쓰인 언어와 문제가 요구하는 형식(글자 수·문장 수 등)에 맞추고, 말투 설정과 상관없이 실제로 제출할 답안 문체로 쓴다.",
+  "객관식이면 '3번'처럼 번호를 말하고, 헷갈리지 않게 보기 내용도 짧게 붙인다. 답 자체가 외국어여야 하는 문제(영작, 빈칸 채우기 등)는 그 언어로 쓴다.",
+  "문제가 여러 개면 '1번은 ~, 2번은 ~'처럼 순서대로 쓰고, 문제마다 줄을 바꾼다.",
+  "AI나 해설지처럼 보이는 글투를 쓰지 않는다: '정답:', '해설:' 같은 머리표, 글머리 기호, 굵은 글씨·# 같은 마크다운 기호, '따라서', '결론적으로' 같은 딱딱한 말.",
+  "흐리거나 잘려도 읽을 수 있는 만큼으로 가장 그럴듯한 답을 쓴다. 문제를 전혀 읽을 수 없을 때만 '잘 안 보여'라고만 쓴다.",
   "화면에 풀 문제나 질문이 없으면 정확히 '(문제 없음)'만 출력한다.",
 ].join("\n");
 
@@ -345,8 +364,18 @@ if (!EFFORTS.includes(settings.effort)) settings.effort = DEFAULTS.effort;
 if (!TONES[settings.tone]) settings.tone = DEFAULTS.tone;
 let apiKey = store.get("ct.key") || "";
 const saveSettings = () => store.set("ct.settings", JSON.stringify(settings));
-if ((savedSettings.v || 0) < 2) { settings.res = MAX_EDGE; settings.v = 2; saveSettings(); } // 예전에 저장된 사진 크기도 최고 화질로 올림
+{ // 예전에 저장된 설정을 지금 기본에 맞게 올림
+  const sv = savedSettings.v || 0;
+  if (sv < 2) settings.res = MAX_EDGE; // 사진은 최고 화질로
+  if (sv < 3) { // 쓸데없는 말 없이 답만, 글자는 더 크게(한 화면 맞춤이 알아서 줄임)
+    if (settings.preset === "brief") settings.preset = "only";
+    if (!(settings.font > 20)) settings.font = DEFAULTS.font;
+    delete settings.camSmall;
+  }
+  if (sv < DEFAULTS.v) { settings.v = DEFAULTS.v; saveSettings(); }
+}
 if (!(settings.zoom > 0)) settings.zoom = 1;
+settings.font = Math.min(48, Math.max(16, +settings.font || DEFAULTS.font));
 
 /* ───────── DOM ───────── */
 const $ = (id) => document.getElementById(id);
@@ -579,6 +608,7 @@ function goLive() {
   frozen = false;
   $("app").classList.remove("frozen");
   $("shot").removeAttribute("src");
+  $("btnNext").textContent = "지금 읽기"; // 카메라를 숨긴 채 기다릴 때만 보이는 버튼
   if (out.textContent) out.classList.add("stale");
   dirty = true; recheck = true; stableMs = 0; // 이미 다음 문제로 넘겨둔 상태면 바로 읽음
   if (!busy()) showWaiting();
@@ -723,7 +753,7 @@ const pastJobs = [];
 const busy = () => !!current && !current.done;
 
 function buildSystem() {
-  const instr = settings.preset === "custom" && settings.custom.trim() ? settings.custom.trim() : PRESETS[settings.preset] || PRESETS.brief;
+  const instr = settings.preset === "custom" && settings.custom.trim() ? settings.custom.trim() : PRESETS[settings.preset] || PRESETS.only;
   return SYSTEM_BASE + "\n" + (TONES[settings.tone] || TONES.casual) + "\n" + instr;
 }
 function buildParams(m, frame, opt) {
@@ -751,6 +781,7 @@ async function send(frame) {
   const job = { id: ++seq, t0: performance.now(), tFirst: 0, text: "", frame, model: m, done: false, aborted: false, stream: null };
   current = job;
   out.textContent = ""; out.classList.add("streaming"); meta.textContent = "";
+  out.style.fontSize = maxFont() + "px"; // 새 답은 가장 큰 글자에서 시작해서, 넘치면 줄임
   $("result").scrollTop = 0;
   setStatus("send", "전송 중"); metrics.textContent = frame.kb + "KB";
 
@@ -804,9 +835,28 @@ function scheduleRender() {
     rafPending = false;
     if (!current || current.done) return; // 끝난 뒤엔 finishJob/failJob이 최종 화면을 그림
     out.textContent = current.text;
+    fitAnswer(false);
     if (current.tFirst) metrics.textContent = "첫 글자 " + fmtS(current.tFirst - current.t0);
   });
 }
+
+/* 답변을 한 화면에 맞추기: 넘치면 글자를 줄여서 스크롤 없이 다 보이게 (최소 14px) */
+const FIT_MIN = 14;
+const maxFont = () => Math.round(settings.font * (settings.camOff ? 1.6 : 1));
+function fitAnswer(full) {
+  if (!settings.fit) { out.style.fontSize = maxFont() + "px"; return; }
+  const box = $("result"), cs = getComputedStyle(box);
+  const avail = box.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) - (meta.textContent ? meta.offsetHeight + 12 : 0);
+  const fits = (f) => { out.style.fontSize = f + "px"; return out.offsetHeight <= avail; };
+  let hi = full ? maxFont() : Math.min(maxFont(), parseFloat(out.style.fontSize) || maxFont()); // 쓰는 중엔 줄이기만 함
+  if (fits(hi)) return;
+  let lo = FIT_MIN;
+  if (!fits(lo)) return; // 가장 작게 해도 넘치면 그 크기로 두고 스크롤
+  while (hi - lo > 0.5) { const mid = (lo + hi) / 2; if (fits(mid)) lo = mid; else hi = mid; }
+  fits(Math.floor(lo * 2) / 2);
+}
+let fitT = 0;
+window.addEventListener("resize", () => { clearTimeout(fitT); fitT = setTimeout(() => fitAnswer(true), 120); }); // 폰을 돌리면 다시 맞춤
 
 function finishJob(job, msg, opt) {
   job.done = true; job.tEnd = performance.now();
@@ -827,14 +877,10 @@ function finishJob(job, msg, opt) {
   const cost = (inTok * price.in + (u.output_tokens || 0) * price.out) / 1e6;
   sessionCost += cost; job.cost = cost;
   job.ttft = job.tFirst ? job.tFirst - job.t0 : 0; job.total = job.tEnd - job.t0;
-  metrics.textContent = "첫 글자 " + fmtS(job.ttft) + " · 전체 " + fmtS(job.total);
+  // 시간·비용은 위 상태줄에만 (답 아래 공간은 답변에 씀. 누적 비용은 설정에서 확인)
+  metrics.textContent = fmtS(job.total) + " · " + fmtUSD(cost);
   setStatus("done", "완료");
-  meta.textContent = [
-    (msg.model || job.model.id).replace("claude-", "") + (fast ? " 빠른 모드" : ""),
-    job.frame.w + "×" + job.frame.h + " " + job.frame.kb + "KB",
-    "입력 " + (u.input_tokens || 0).toLocaleString() + " / 출력 " + (u.output_tokens || 0).toLocaleString() + " 토큰",
-    "이번 " + fmtUSD(cost) + " · 누적 " + fmtUSD(sessionCost),
-  ].join(" · ");
+  fitAnswer(false);
   // 화면에 문제가 없었으면(아직 노트북을 비추기 전 등) 멈추지 않고 바로 문제를 기다림. 같은 화면은 다시 읽지 않음
   if (job.text.trim() === NO_PROBLEM && frozen) goLive();
 }
@@ -858,6 +904,7 @@ function failJob(job, err) {
   const e = document.createElement("span"); e.className = "err"; e.textContent = (job.text ? "\n" : "") + errorMessage(err);
   out.append(e);
   setStatus("error", "오류");
+  fitAnswer(false);
   lastSentD = null; // 답을 못 받은 화면이니 '다시 시도'를 누르면 같은 화면이라도 다시 읽음
   $("btnNext").textContent = "다시 시도";
   if (err instanceof Anthropic.AuthenticationError) openSettings(authErrMsg());
@@ -902,7 +949,7 @@ function openSettings(notice = "") {
   $("inPreset").value = settings.preset; $("inCustom").value = settings.custom; $("inCustom").hidden = settings.preset !== "custom";
   $("inEffort").value = settings.effort; $("inTone").value = settings.tone;
   $("inAuto").checked = settings.auto; $("inSens").value = settings.sens; $("sensVal").textContent = settings.sens;
-  $("inRes").value = String(settings.res); $("inFont").value = settings.font; $("fontVal").textContent = settings.font + "px";
+  $("inRes").value = String(settings.res); $("inFont").value = settings.font; $("fontVal").textContent = settings.font + "px"; $("inFit").checked = settings.fit;
   $("costVal").textContent = fmtUSD(sessionCost);
   $("camRes").textContent = video.videoWidth
     ? "지금 카메라: " + video.videoWidth + "×" + video.videoHeight + (camSafe ? " · 카메라가 자꾸 멈춰서 안전 모드(1080p)로 켰어요" : "") + (zoomCfg.hw ? " · 기기 줌 사용" : zoom > 1 ? " · 화면 확대 중이라 가운데만 잘라 보냄 (휴대폰을 가까이 두면 더 선명해요)" : "")
@@ -911,7 +958,7 @@ function openSettings(notice = "") {
 }
 $("inPreset").addEventListener("change", (e) => { $("inCustom").hidden = e.target.value !== "custom"; });
 $("inSens").addEventListener("input", (e) => { $("sensVal").textContent = e.target.value; });
-$("inFont").addEventListener("input", (e) => { $("fontVal").textContent = e.target.value + "px"; document.documentElement.style.setProperty("--font", e.target.value + "px"); });
+$("inFont").addEventListener("input", (e) => { $("fontVal").textContent = e.target.value + "px"; });
 $("btnShowKey").addEventListener("click", () => { const k = $("inKey"); k.type = k.type === "password" ? "text" : "password"; $("btnShowKey").textContent = k.type === "password" ? "보기" : "숨기기"; });
 $("btnResetCost").addEventListener("click", () => { sessionCost = 0; $("costVal").textContent = fmtUSD(0); });
 $("inTestFile").addEventListener("change", async (e) => {
@@ -934,7 +981,7 @@ function applySettingsFromForm() {
   if (sel) settings.model = sel.value;
   settings.preset = $("inPreset").value; settings.custom = $("inCustom").value; settings.effort = $("inEffort").value; settings.tone = $("inTone").value;
   settings.auto = $("inAuto").checked; settings.sens = +$("inSens").value;
-  settings.res = +$("inRes").value; settings.font = +$("inFont").value;
+  settings.res = +$("inRes").value; settings.font = +$("inFont").value; settings.fit = $("inFit").checked;
   saveSettings(); applySettings();
 }
 dlg.addEventListener("close", () => { if (dlg.returnValue === "save") applySettingsFromForm(); else applySettings(); });
@@ -943,9 +990,10 @@ function applySettings() {
   document.documentElement.style.setProperty("--font", settings.font + "px");
   $("btnAuto").setAttribute("aria-pressed", String(settings.auto));
   $("btnAuto").textContent = settings.auto ? "자동 읽기 켬" : "자동 읽기 끔";
-  $("cam").classList.toggle("small", settings.camSmall);
-  $("btnCamSize").textContent = settings.camSmall ? "미리보기 크게" : "미리보기 작게";
+  $("app").classList.toggle("camoff", settings.camOff); // ✕로 카메라 화면 숨김 → 답변이 화면 전체
+  $("btnCamShow").hidden = !settings.camOff;
   if (mediaStream && !frozen && !busy() && dot.dataset.s !== "error") showWaiting();
+  requestAnimationFrame(() => fitAnswer(true)); // 바뀐 크기에 맞춰 글자 다시 맞춤
 }
 
 /* ───────── 버튼 ───────── */
@@ -976,12 +1024,13 @@ $("cam").addEventListener("touchend", pinchEnd);
 $("cam").addEventListener("touchcancel", pinchEnd);
 $("cam").addEventListener("gesturestart", (e) => e.preventDefault()); // 아이폰 사파리의 페이지 확대 막기
 $("btnShoot").addEventListener("click", (e) => { e.stopPropagation(); trigger(); });
-$("btnNext").addEventListener("click", nextProblem);
+$("btnNext").addEventListener("click", () => frozen ? nextProblem() : trigger()); // 멈춘 동안 '다음 문제', 카메라 숨기고 기다리는 동안 '지금 읽기'
+$("btnCamOff").addEventListener("click", noBubble(() => { settings.camOff = true; saveSettings(); applySettings(); }));
+$("btnCamShow").addEventListener("click", () => { settings.camOff = false; saveSettings(); applySettings(); });
 $("btnAuto").addEventListener("click", (e) => {
   e.stopPropagation(); settings.auto = !settings.auto; saveSettings(); applySettings();
   if (settings.auto) { dirty = true; recheck = true; stableMs = 0; } // 켠 순간 보이는 화면이 답한 적 없는 문제면 읽음
 });
-$("btnCamSize").addEventListener("click", (e) => { e.stopPropagation(); settings.camSmall = !settings.camSmall; saveSettings(); applySettings(); });
 
 applySettings();
 setStatus("idle", "시작 전");
