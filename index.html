@@ -51,7 +51,10 @@
   .icon-btn { width: 44px; height: 44px; border: 0; background: transparent; border-radius: 12px; display: grid; place-items: center; flex: none; }
   .icon-btn:active { background: var(--surface-2); }
   .icon-btn svg { width: 22px; height: 22px; stroke: var(--text); }
-  .bar-btn { border: 1px solid var(--line); background: var(--surface-2); border-radius: 999px; padding: 7px 12px; font-size: 13px; font-weight: 650; flex: none; }
+  .bar-btn { border: 1px solid var(--line); background: var(--surface-2); border-radius: 999px; padding: 7px 11px; font-size: 13px; font-weight: 650; flex: none; white-space: nowrap; }
+  .bar-btn[data-s="ok"] { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 55%, transparent); }
+  .bar-btn[data-s="warn"] { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 60%, transparent); }
+  .status { min-width: 0; } #statusText { min-width: 0; overflow: hidden; text-overflow: ellipsis; } /* 좁은 폰에서 버튼이 밀려나지 않게 상태 글자가 줄어듦 */
 
   /* ── 카메라 ── */
   /* touch-action: none → 두 손가락 벌리기를 페이지 확대가 아니라 카메라 확대로 씀 */
@@ -172,6 +175,7 @@
   <header class="bar">
     <div class="status"><span class="dot" id="dot"></span><span id="statusText">시작 전</span></div>
     <div class="metrics" id="metrics"></div>
+    <button class="bar-btn" id="btnProfileChip" aria-label="내 경험 자료 상태">경험</button>
     <button class="bar-btn" id="btnCamShow" hidden>카메라 보기</button>
     <button class="icon-btn" id="btnSettings" aria-label="설정">
       <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -355,7 +359,7 @@ const SYSTEM_BASE = [
   "- 문제 유형이나 성격 설명. 예: '이건 정답이 있는 문제가 아니라 네 경험으로 쓰는 서술형이야', '정답이 따로 없어'",
   "- 쓰는 방법 조언이나 가이드. 예: '네 경험을 쓰면 돼', '이런 식으로 쓰면 좋아', '예시 답안이야'",
   "- 주의사항, 인사, 문제 다시 읊기, 되묻기, '확실하진 않은데' 같은 단서",
-  "서술형·논술형·의견·경험을 묻는 문제도 예외 없이, 그대로 옮겨 적어 낼 수 있는 완성된 답안을 바로 쓴다. 경험을 묻는 문제면, 아래에 '내 경험 자료'가 있을 때는 거기서 골라 쓰고, 자료가 없거나 맞는 경험이 전혀 없을 때만 자연스럽고 그럴듯한 경험을 1인칭으로 지어서 쓴다. 답안은 문제가 쓰인 언어와 문제가 요구하는 형식(글자 수·문장 수 등)에 맞추고, 말투 설정과 상관없이 실제로 제출할 답안 문체로 쓴다.",
+  "서술형·논술형·의견·경험을 묻는 문제도 예외 없이, 그대로 옮겨 적어 낼 수 있는 완성된 답안을 바로 쓴다. 답안은 문제가 쓰인 언어와 문제가 요구하는 형식(글자 수·문장 수 등)에 맞추고, 말투 설정과 상관없이 실제로 제출할 답안 문체로 쓴다. 본인에 대해 묻는 문제는 아래에 '내 경험 자료'가 있으면 반드시 그 자료로 쓰고, 자료가 없을 때만 자연스럽고 그럴듯한 내용을 1인칭으로 지어서 쓴다.",
   "객관식이면 '3번'처럼 번호를 말하고, 헷갈리지 않게 보기 내용도 짧게 붙인다. 답 자체가 외국어여야 하는 문제(영작, 빈칸 채우기 등)는 그 언어로 쓴다.",
   "문제가 여러 개면 '1번은 ~, 2번은 ~'처럼 순서대로 쓰고, 문제마다 줄을 바꾼다.",
   "AI나 해설지처럼 보이는 글투를 쓰지 않는다: '정답:', '해설:' 같은 머리표, 글머리 기호, 굵은 글씨·# 같은 마크다운 기호, '따라서', '결론적으로' 같은 딱딱한 말.",
@@ -767,18 +771,21 @@ const busy = () => !!current && !current.done;
 
 // 경험·자기소개 문제에 '내 경험 자료'를 어떻게 쓸지
 const PROFILE_RULES = [
-  "아래 <내 경험 자료>는 이 답안을 낼 사람(휴대폰 주인)의 실제 경험이다. 답안은 이 사람이 직접 쓴 것처럼 1인칭으로 쓴다.",
-  "- 자기소개, 지원 동기, 프로젝트·개발 경험, 문제 해결·실패 극복, 협업, 성과, 배운 점, 앞으로의 계획처럼 본인 경험을 묻는 문제는 이 자료에서 문제에 가장 잘 맞는 프로젝트와 장면을 골라 쓴다. 여러 프로젝트를 늘어놓기보다 1~2개를 골라 구체적으로 쓴다.",
-  "- 숫자·날짜·이름·결과는 자료에 있는 것만 쓴다. 자료에 없는 수상, 사용자 수, 매출, 팀원, 학교·회사 경력은 만들지 않는다. 결과 발표 전인 대회는 수상했다고 쓰지 않는다.",
-  "- 문제가 요구하는 글자 수·형식·언어에 맞춘다. 영어로 묻는 문제면 영어로 쓴다.",
+  "[내 경험 자료 쓰는 법] 아래 <내 경험 자료>는 이 답안을 낼 사람(휴대폰 주인)의 실제 인적 사항과 경험이다. 이 사람이 직접 쓴 것처럼 1인칭으로 쓴다.",
+  "- 본인에 대해 묻는 모든 문제(자기소개, 성격·장단점, 가치관, 지원 동기, 프로젝트·개발 경험, 문제 해결·실패 극복, 협업·갈등, 성과, 배운 점, 앞으로의 목표 등)는 반드시 이 자료를 바탕으로 쓴다. 지어낸 일반적인 경험으로 대신하지 않는다.",
+  "- 문제에 딱 맞는 경험이 자료에 없어도, 자료 속 가장 가까운 실제 경험을 골라 문제에 맞게 연결해서 쓴다. 예: 갈등·협업 경험을 물으면 심사 반려·서비스 장애를 해결한 일이나 아이디어를 과감히 바꾼 판단으로 풀어 쓴다.",
+  "- 학력·나이·성별 같은 인적 사항은 자료대로 쓴다. 자료에 없는 학교·학과·전공·회사 경력, 수상, 팀원, 사용자 수, 매출은 절대 만들지 않는다. 결과 발표 전인 대회는 수상했다고 쓰지 않는다.",
+  "- 여러 프로젝트를 늘어놓기보다 문제에 가장 잘 맞는 1~2개를 골라 구체적인 장면과 숫자로 쓴다.",
   "- 경험과 관계없는 문제(객관식, 지식·계산 문제 등)에는 이 자료를 쓰지 않는다.",
 ].join("\n");
 let profileText = store.get("ct.profile") || "";
 
 function buildSystem() {
   const instr = settings.preset === "custom" && settings.custom.trim() ? settings.custom.trim() : PRESETS[settings.preset] || PRESETS.only;
-  let text = SYSTEM_BASE + "\n" + (TONES[settings.tone] || TONES.casual) + "\n" + instr;
-  if (settings.useProfile && profileText) text += "\n\n" + PROFILE_RULES + "\n\n<내 경험 자료>\n" + profileText + "\n</내 경험 자료>";
+  let text = SYSTEM_BASE;
+  // 경험 자료는 말투·답변 방식보다 앞에 둬서 놓치지 않게 함
+  if (settings.useProfile && profileText) text += "\n\n" + PROFILE_RULES + "\n\n<내 경험 자료>\n" + profileText + "\n</내 경험 자료>\n";
+  text += "\n" + (TONES[settings.tone] || TONES.casual) + "\n" + instr;
   // 자료가 길어서 매번 새로 읽으면 비싸므로 캐시: 5분 안에 다시 물으면 이 부분은 1/10 값
   return [{ type: "text", text, cache_control: { type: "ephemeral" } }];
 }
@@ -786,19 +793,43 @@ function buildSystem() {
 /* 암호로 잠근 '내 경험 자료'(profile.enc.json)를 풀어서 이 휴대폰에만 저장 */
 const normPass = (p) => p.normalize("NFC").toLowerCase().replace(/[^0-9a-z가-힣]/g, ""); // 대소문자·하이픈·띄어쓰기 무시
 const unb64 = (s) => Uint8Array.from(atob(s), (ch) => ch.charCodeAt(0));
-async function unlockProfile(pass) {
+async function fetchProfileEnc() {
   const res = await fetch("profile.enc.json?v=" + Date.now(), { cache: "no-store" });
   if (!res.ok) throw new Error("자료 파일을 못 받았어요 (" + res.status + ")");
-  const enc = await res.json();
+  return res.json();
+}
+async function decryptProfile(enc, pass) {
   const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(normPass(pass)), "PBKDF2", false, ["deriveKey"]);
   const key = await crypto.subtle.deriveKey({ name: "PBKDF2", salt: unb64(enc.salt), iterations: enc.iter, hash: "SHA-256" }, base, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
   try {
-    return new TextDecoder().decode(await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(enc.iv) }, key, unb64(enc.ct)));
+    return new TextDecoder().decode(await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(enc.iv) }, key, unb64(enc.ct))).trim();
   } catch { throw new Error("암호가 맞지 않아요. 다시 확인해 주세요."); }
 }
+// 푼 자료·암호·자료 버전을 이 휴대폰에 저장 (자료가 새로 바뀌면 다음에 앱을 열 때 저절로 새 자료로 바꾸려고)
+function saveUnlockedProfile(text, pass, ver) {
+  profileText = text;
+  store.set("ct.profile", text); store.set("ct.profilePass", normPass(pass)); store.set("ct.profileVer", ver); store.set("ct.profileEdited", "");
+  updateProfileChip();
+}
+async function refreshProfileIfNew() { // 앱을 열 때: 서버 자료가 바뀌었고 직접 고친 적이 없으면 새 자료로 조용히 바꿈
+  const pass = store.get("ct.profilePass");
+  if (!pass || store.get("ct.profileEdited")) return;
+  try {
+    const enc = await fetchProfileEnc();
+    if (enc.iv !== store.get("ct.profileVer")) saveUnlockedProfile(await decryptProfile(enc, pass), pass, enc.iv);
+  } catch {}
+}
+// 자료가 있지만 버전 기록이 없음 = 예전 방식으로 불러온 옛 자료 → 암호를 한 번 더 넣어야 함
+const profileStale = () => !!profileText && !store.get("ct.profileVer") && !store.get("ct.profileEdited");
 const profileStateText = () => profileText
-  ? "불러온 자료 " + profileText.length.toLocaleString() + "자 · " + ((profileText.match(/^## /gm) || []).length) + "개 항목" + (settings.useProfile ? "" : " (지금은 안 씀)")
+  ? "불러온 자료 " + profileText.length.toLocaleString() + "자 · " + ((profileText.match(/^## /gm) || []).length) + "개 항목" + (settings.useProfile ? "" : " (지금은 안 씀)") + (profileStale() ? " · 새 자료가 있어요. 암호를 한 번 더 넣어 주세요" : "")
   : "아직 없어요. 받은 암호를 넣고 '불러오기'를 누르세요.";
+// 위 상태줄의 '경험' 표시: 답변에 경험 자료가 쓰이는지 한눈에
+function updateProfileChip() {
+  const chip = $("btnProfileChip");
+  const [label, s] = !profileText ? ["경험 없음", "warn"] : !settings.useProfile ? ["경험 끔", "warn"] : profileStale() ? ["경험 갱신", "warn"] : ["경험 ✓", "ok"];
+  chip.textContent = label; chip.dataset.s = s;
+}
 function buildParams(m, frame, opt) {
   const p = {
     model: m.id,
@@ -1011,9 +1042,10 @@ async function doUnlockProfile() {
   if (!normPass(pass)) { $("profileState").textContent = "암호를 넣어 주세요."; return; }
   const btn = $("btnProfileUnlock"); btn.disabled = true; $("profileState").textContent = "푸는 중…";
   try {
-    profileText = (await unlockProfile(pass)).trim();
-    store.set("ct.profile", profileText);
-    $("inProfile").value = profileText; $("inUseProfile").checked = true; settings.useProfile = true; saveSettings();
+    const enc = await fetchProfileEnc();
+    settings.useProfile = true; saveSettings();
+    saveUnlockedProfile(await decryptProfile(enc, pass), pass, enc.iv);
+    $("inProfile").value = profileText; $("inUseProfile").checked = true;
     $("inProfilePass").value = "";
     $("profileState").textContent = "불러왔어요 ✓ " + profileStateText();
   } catch (err) {
@@ -1023,7 +1055,9 @@ async function doUnlockProfile() {
 $("btnProfileUnlock").addEventListener("click", doUnlockProfile);
 $("inProfilePass").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); doUnlockProfile(); } }); // 엔터로 설정 창이 닫히지 않게
 $("btnProfileClear").addEventListener("click", () => {
-  profileText = ""; store.set("ct.profile", ""); $("inProfile").value = ""; $("profileState").textContent = profileStateText();
+  profileText = ""; $("inProfile").value = "";
+  for (const k of ["ct.profile", "ct.profilePass", "ct.profileVer", "ct.profileEdited"]) store.set(k, "");
+  $("profileState").textContent = profileStateText(); updateProfileChip();
 });
 $("inTestFile").addEventListener("change", async (e) => {
   const file = e.target.files?.[0]; if (!file) return;
@@ -1047,7 +1081,10 @@ function applySettingsFromForm() {
   settings.auto = $("inAuto").checked; settings.sens = +$("inSens").value;
   settings.res = +$("inRes").value; settings.font = +$("inFont").value; settings.fit = $("inFit").checked;
   settings.useProfile = $("inUseProfile").checked;
-  profileText = $("inProfile").value.trim(); store.set("ct.profile", profileText); // 직접 고친 내용도 저장
+  const edited = $("inProfile").value.trim();
+  if (edited !== profileText) { // 직접 고친 내용도 저장하고, 앞으로 새 자료로 저절로 덮어쓰지 않음
+    profileText = edited; store.set("ct.profile", profileText); store.set("ct.profileEdited", profileText ? "1" : "");
+  }
   saveSettings(); applySettings();
 }
 dlg.addEventListener("close", () => { if (dlg.returnValue === "save") applySettingsFromForm(); else applySettings(); });
@@ -1058,6 +1095,7 @@ function applySettings() {
   $("btnAuto").textContent = settings.auto ? "자동 읽기 켬" : "자동 읽기 끔";
   $("app").classList.toggle("camoff", settings.camOff); // ✕로 카메라 화면 숨김 → 답변이 화면 전체
   $("btnCamShow").hidden = !settings.camOff;
+  updateProfileChip();
   if (mediaStream && !frozen && !busy() && dot.dataset.s !== "error") showWaiting();
   requestAnimationFrame(() => fitAnswer(true)); // 바뀐 크기에 맞춰 글자 다시 맞춤
 }
@@ -1093,6 +1131,11 @@ $("btnShoot").addEventListener("click", (e) => { e.stopPropagation(); trigger();
 $("btnNext").addEventListener("click", () => frozen ? nextProblem() : trigger()); // 멈춘 동안 '다음 문제', 카메라 숨기고 기다리는 동안 '지금 읽기'
 $("btnCamOff").addEventListener("click", noBubble(() => { settings.camOff = true; saveSettings(); applySettings(); }));
 $("btnCamShow").addEventListener("click", () => { settings.camOff = false; saveSettings(); applySettings(); });
+// '경험' 표시를 누르면 설정의 내 경험 자료 칸으로 바로 감
+$("btnProfileChip").addEventListener("click", () => {
+  openSettings();
+  setTimeout(() => { $("profileState").scrollIntoView({ block: "center" }); if (!profileText || profileStale()) $("inProfilePass").focus(); }, 60);
+});
 $("btnAuto").addEventListener("click", (e) => {
   e.stopPropagation(); settings.auto = !settings.auto; saveSettings(); applySettings();
   if (settings.auto) { dirty = true; recheck = true; stableMs = 0; } // 켠 순간 보이는 화면이 답한 적 없는 문제면 읽음
@@ -1100,6 +1143,7 @@ $("btnAuto").addEventListener("click", (e) => {
 
 applySettings();
 setStatus("idle", "시작 전");
+refreshProfileIfNew(); // 경험 자료가 새로 바뀌었으면 저절로 새 자료로
 // 개발자 도구에서 테스트용으로만 사용
 window.app = { useStream, trigger, nextProblem, applyZoom, captureFrame, dbg, get camSafe() { return camSafe; }, get isCamera() { return isCamera; }, get zoom() { return zoom; }, get zoomCfg() { return zoomCfg; }, get settings() { return settings; }, get compat() { return compat; }, get frozen() { return frozen; } };
 </script>
