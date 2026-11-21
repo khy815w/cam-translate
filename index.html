@@ -2,6 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
+<meta name="build" content="2026-11-21.3"><!-- 고칠 때마다 올림: 폰이 이 값으로 새 버전을 알아채고 저절로 다시 엶 -->
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0b0d10">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -181,6 +182,7 @@
     <div class="metrics" id="metrics"></div>
     <button class="bar-btn" id="btnProfileChip" aria-label="내 경험 자료 상태">경험</button>
     <button class="bar-btn" id="btnCamShow" hidden>카메라 보기</button>
+    <button class="bar-btn" id="btnUpdate" hidden style="border-color:var(--accent)">새 버전 ↻</button>
     <button class="icon-btn" id="btnSettings" aria-label="설정">
       <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
     </button>
@@ -342,6 +344,11 @@
       <div class="row"><b id="costVal" style="flex:1">$0.000</b><button type="button" class="btn" id="btnResetCost">초기화</button></div>
     </div>
 
+    <div class="field">
+      <span>앱 버전</span>
+      <small id="buildVal"></small>
+    </div>
+
     <div class="actions">
       <button class="btn primary" value="save" id="btnSave">저장</button>
     </div>
@@ -440,6 +447,8 @@ settings.font = Math.min(48, Math.max(16, +settings.font || DEFAULTS.font));
 
 /* ───────── DOM ───────── */
 const $ = (id) => document.getElementById(id);
+const BUILD = document.querySelector('meta[name="build"]')?.content || ""; // 지금 돌고 있는 앱 버전
+let newBuild = ""; // 사이트에 올라온 더 새 버전 (있으면)
 const video = $("video"), out = $("out"), meta = $("meta"), dot = $("dot"), statusText = $("statusText"), metrics = $("metrics");
 const dlg = $("settings");
 
@@ -989,13 +998,21 @@ function scrollEnd() { // 답의 끝이 화면 맨 아래에 올 때의 위치 (
   const pad = parseFloat(getComputedStyle(resultBox).paddingBottom) || 0;
   return last.getBoundingClientRect().bottom - resultBox.getBoundingClientRect().top + resultBox.scrollTop + pad - resultBox.clientHeight;
 }
-function setPaused(p) { scroller.paused = p; $("scrollTag").hidden = !p; }
-function scrollReset() { scroller.t0 = 0; scroller.pos = 0; scroller.touchAt = 0; resultBox.scrollTop = 0; setPaused(false); resultBox.classList.remove("more"); }
+let tagT = 0;
+function showTag(text, ms) { // 답 오른쪽 아래 작은 안내 (ms가 있으면 그 시간 뒤 사라짐)
+  const t = $("scrollTag"); t.textContent = text; t.hidden = false; clearTimeout(tagT);
+  if (ms) tagT = setTimeout(() => { if (!scroller.paused) t.hidden = true; }, ms);
+}
+function setPaused(p) {
+  scroller.paused = p;
+  if (p) showTag("⏸ 멈춤 · 누르면 다시 내려가요"); else { clearTimeout(tagT); $("scrollTag").hidden = true; }
+}
+function scrollReset() { scroller.t0 = 0; scroller.pos = 0; scroller.moved = false; scroller.touchAt = 0; resultBox.scrollTop = 0; setPaused(false); resultBox.classList.remove("more"); }
 function scrollStop() { scroller.t0 = 0; setPaused(false); resultBox.classList.remove("more"); }
-function scrollStart() { // 첫 글자가 나온 순간부터: 화면 위쪽 3분의 1을 읽을 시간만큼 기다렸다가 내려가기 시작
+function scrollStart() { // 첫 글자가 나온 순간부터: 첫 줄들을 읽을 시간만큼(3~6초) 기다렸다가 내려가기 시작
   const now = performance.now();
   scroller.t0 = now; scroller.v = scrollSpeedPx(); scroller.vAt = now;
-  const holdMs = Math.min(15000, Math.max(2500, resultBox.clientHeight * 0.33 / scroller.v * 1000));
+  const holdMs = Math.min(6000, Math.max(3000, resultBox.clientHeight * 0.33 / scroller.v * 1000));
   scroller.holdUntil = now + holdMs;
 }
 function scrollTick(now) {
@@ -1008,6 +1025,7 @@ function scrollTick(now) {
   if (now - scroller.touchAt < 2500) { scroller.pos = resultBox.scrollTop; return; } // 손으로 움직인 뒤엔 잠깐 기다렸다가 그 자리부터
   if (now < scroller.holdUntil || end <= 0 || scroller.pos >= end) return;
   if (now - scroller.vAt > 500) { scroller.v = scrollSpeedPx(); scroller.vAt = now; }
+  if (!scroller.moved) { scroller.moved = true; showTag("▼ 천천히 내려가요 · 누르면 멈춤", 4000); } // 움직이기 시작했다는 걸 알려줌
   scroller.pos = Math.min(end, scroller.pos + scroller.v * dt);
   resultBox.scrollTop = scroller.pos;
 }
@@ -1125,6 +1143,7 @@ function openSettings(notice = "") {
   $("inRes").value = String(settings.res); $("inFont").value = settings.font; $("fontVal").textContent = settings.font + "px"; $("inFit").checked = settings.fit;
   $("inProfile").value = profileText; $("inUseProfile").checked = settings.useProfile; $("inProfilePass").value = ""; $("profileState").textContent = profileStateText();
   $("costVal").textContent = fmtUSD(sessionCost);
+  $("buildVal").textContent = BUILD + (newBuild ? " · 새 버전(" + newBuild + ")이 있어요. 위의 '새 버전 ↻'을 누르면 바뀌어요." : " · 최신 버전이에요");
   $("camRes").textContent = video.videoWidth
     ? "지금 카메라: " + video.videoWidth + "×" + video.videoHeight + (camSafe ? " · 카메라가 자꾸 멈춰서 안전 모드(1080p)로 켰어요" : "") + (zoomCfg.hw ? " · 기기 줌 사용" : zoom > 1 ? " · 화면 확대 중이라 가운데만 잘라 보냄 (휴대폰을 가까이 두면 더 선명해요)" : "")
     : "";
@@ -1243,8 +1262,32 @@ $("btnAuto").addEventListener("click", (e) => {
   if (settings.auto) { dirty = true; recheck = true; stableMs = 0; } // 켠 순간 보이는 화면이 답한 적 없는 문제면 읽음
 });
 
+/* ───────── 새 버전 저절로 받기 ─────────
+   홈 화면에 추가한 앱은 새로고침 버튼이 없고, 폰이 예전 화면을 10분까지 들고 있을 수 있음.
+   열 때와 다시 돌아올 때 사이트에 새 버전이 있는지 보고, 카메라를 켜기 전이면 바로 새 버전으로 다시 엶.
+   카메라를 쓰는 중이면 위에 '새 버전 ↻' 버튼만 띄움(누르면 바뀜). */
+const openBuild = (b) => location.replace(location.pathname + "?v=" + encodeURIComponent(b || Date.now()));
+async function checkUpdate() {
+  try {
+    const r = await fetch(location.pathname, { cache: "reload" }); // 폰에 저장된 예전 사본 말고 사이트에서 직접 받음
+    if (!r.ok) return;
+    const m = (await r.text()).match(/<meta name="build" content="([^"]+)"/);
+    if (!m || !BUILD || m[1] === BUILD) return;
+    newBuild = m[1];
+    let tried = ""; try { tried = sessionStorage.getItem("ct.updTried") || ""; } catch {}
+    if (!mediaStream && !current && tried !== newBuild) { // 아직 아무것도 안 한 상태면 바로 새 버전으로
+      try { sessionStorage.setItem("ct.updTried", newBuild); } catch {}
+      openBuild(newBuild); return;
+    }
+    $("btnUpdate").hidden = false;
+  } catch {}
+}
+$("btnUpdate").addEventListener("click", () => openBuild(newBuild));
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") checkUpdate(); });
+
 applySettings();
 setStatus("idle", "시작 전");
+checkUpdate();
 refreshProfileIfNew(); // 경험 자료가 새로 바뀌었으면 저절로 새 자료로
 // 개발자 도구에서 테스트용으로만 사용
 window.app = { useStream, trigger, nextProblem, applyZoom, captureFrame, dbg, get camSafe() { return camSafe; }, get isCamera() { return isCamera; }, get zoom() { return zoom; }, get zoomCfg() { return zoomCfg; }, get settings() { return settings; }, get compat() { return compat; }, get frozen() { return frozen; }, scroller }; 
