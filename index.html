@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<meta name="build" content="2026-11-21.4"><!-- 고칠 때마다 올림: 폰이 이 값으로 새 버전을 알아채고 저절로 다시 엶 -->
+<meta name="build" content="2026-11-21.5"><!-- 고칠 때마다 올림: 폰이 이 값으로 새 버전을 알아채고 저절로 다시 엶 -->
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0b0d10">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -67,6 +67,9 @@
   /* 답변한 순간의 사진을 멈춰서 보여줌 */
   .cam .shot { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
   #shotTag { left: 12px; top: 10px; pointer-events: none; }
+  /* 멈춘 사진에서 네모로 고른 부분 (바깥은 어둡게) */
+  .cam .sel { position: absolute; border: 2px solid var(--accent); border-radius: 4px; pointer-events: none;
+    background: color-mix(in srgb, var(--accent) 12%, transparent); box-shadow: 0 0 0 9999px rgba(0,0,0,.4); }
   /* 확대·축소: − 1.0× + */
   .zoom { position: absolute; left: 12px; bottom: 12px; display: flex; align-items: center; border-radius: 999px;
     background: rgba(0,0,0,.55); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
@@ -191,8 +194,9 @@
   <section class="cam" id="cam" aria-label="카메라 화면. 탭하면 바로 답변">
     <video id="video" playsinline muted autoplay></video>
     <img class="shot" id="shot" alt="답변한 화면">
+    <div class="sel" id="selBox" hidden></div>
     <div class="flash" id="flash"></div>
-    <span class="chip" id="shotTag">답변한 화면</span>
+    <span class="chip" id="shotTag">손가락으로 네모를 그리면 그 부분만 답해요</span>
     <button class="chip" id="btnAuto" aria-pressed="true">자동 읽기</button>
     <div class="zoom" id="zoomBox">
       <button class="zb" id="btnZoomOut" aria-label="축소">−</button>
@@ -673,6 +677,7 @@ function showWaiting() { setStatus("watch", waitText()); }
 function freeze(frame) {
   frozen = true;
   $("shot").src = "data:image/jpeg;base64," + frame.b64;
+  clearSel();
   $("btnNext").textContent = "다음 문제 →";
   $("app").classList.add("frozen");
   out.classList.remove("stale");
@@ -682,6 +687,7 @@ function goLive() {
   frozen = false;
   $("app").classList.remove("frozen");
   $("shot").removeAttribute("src");
+  clearSel();
   $("btnNext").textContent = "지금 읽기"; // 카메라를 숨긴 채 기다릴 때만 보이는 버튼
   if (out.textContent) out.classList.add("stale");
   dirty = true; recheck = true; stableMs = 0; // 이미 다음 문제로 넘겨둔 상태면 바로 읽음
@@ -896,7 +902,9 @@ function buildParams(m, frame, opt) {
     output_config: { effort: settings.effort }, // 낮을수록 빨리, 높을수록 꼼꼼히 풂
     messages: [{ role: "user", content: [
       { type: "image", source: { type: "base64", media_type: "image/jpeg", data: frame.b64 } },
-      { type: "text", text: "이 사진 속 노트북 화면의 문제를 풀어서 답해줘." },
+      { type: "text", text: frame.region
+        ? "이 사진은 노트북 화면에서 내가 네모로 직접 고른 부분만 잘라낸 거야. 이 안에 있는 문제(질문)에만 답해줘. 가장자리에 잘려서 일부만 보이는 다른 문제나 글은 무시해."
+        : "이 사진 속 노트북 화면의 문제를 풀어서 답해줘." },
     ] }],
   };
   // Haiku는 '빠르게'일 때만 생각을 끔 (Opus 5.5·Sonnet 5.5는 끌 수 없고 effort로만 조절)
@@ -1223,6 +1231,57 @@ function applySettings() {
   updateProfileChip();
   if (mediaStream && !frozen && !busy() && dot.dataset.s !== "error") showWaiting();
   requestAnimationFrame(() => fitAnswer(true)); // 바뀐 크기에 맞춰 글자 다시 맞춤
+}
+
+/* ───────── 멈춘 사진에서 네모로 골라 그 부분만 답하기 ───────── */
+const sel = { on: false, x0: 0, y0: 0, x1: 0, y1: 0, box: null };
+function shotBox() { // 사진이 실제로 그려진 자리 (화면 비율이 달라 위아래·양옆에 검은 띠가 있을 수 있음)
+  const img = $("shot"), r = img.getBoundingClientRect(), iw = img.naturalWidth, ih = img.naturalHeight;
+  if (!iw || !ih || !r.width) return null;
+  const k = Math.min(r.width / iw, r.height / ih), w = iw * k, h = ih * k;
+  return { left: r.left + (r.width - w) / 2, top: r.top + (r.height - h) / 2, w, h, k };
+}
+const clampTo = (b, x, y) => [Math.min(b.left + b.w, Math.max(b.left, x)), Math.min(b.top + b.h, Math.max(b.top, y))];
+function drawSel() {
+  const cam = $("cam").getBoundingClientRect(), el = $("selBox");
+  el.style.left = Math.min(sel.x0, sel.x1) - cam.left + "px"; el.style.top = Math.min(sel.y0, sel.y1) - cam.top + "px";
+  el.style.width = Math.abs(sel.x1 - sel.x0) + "px"; el.style.height = Math.abs(sel.y1 - sel.y0) + "px";
+  el.hidden = false;
+}
+function clearSel() { sel.on = false; $("selBox").hidden = true; }
+$("cam").addEventListener("pointerdown", (e) => {
+  if (!frozen || !e.isPrimary || e.target.closest("button")) return;
+  const b = shotBox(); if (!b) return;
+  e.preventDefault();
+  sel.on = true; sel.box = b; [sel.x0, sel.y0] = clampTo(b, e.clientX, e.clientY); sel.x1 = sel.x0; sel.y1 = sel.y0;
+  try { $("cam").setPointerCapture(e.pointerId); } catch {}
+});
+$("cam").addEventListener("pointermove", (e) => {
+  if (!sel.on || !e.isPrimary) return;
+  [sel.x1, sel.y1] = clampTo(sel.box, e.clientX, e.clientY); drawSel();
+});
+$("cam").addEventListener("pointerup", (e) => {
+  if (!sel.on || !e.isPrimary) return;
+  sel.on = false;
+  [sel.x1, sel.y1] = clampTo(sel.box, e.clientX, e.clientY);
+  if (Math.abs(sel.x1 - sel.x0) < 20 || Math.abs(sel.y1 - sel.y0) < 20) { $("selBox").hidden = true; return; } // 너무 작으면 그냥 탭으로 봄
+  drawSel(); sendRegion(sel.box, sel.x0, sel.y0, sel.x1, sel.y1);
+});
+$("cam").addEventListener("pointercancel", () => { if (sel.on) clearSel(); });
+function sendRegion(b, ax, ay, bx, by) {
+  if (!apiKey) { openSettings("답변을 받으려면 API 키를 넣어주세요."); return; }
+  const sx = (Math.min(ax, bx) - b.left) / b.k, sy = (Math.min(ay, by) - b.top) / b.k;
+  const sw = Math.abs(bx - ax) / b.k, sh = Math.abs(by - ay) / b.k;
+  // 작은 부분은 최대 2배까지 키워서 글자를 크게 보냄 (Claude가 그대로 받는 한도 안에서)
+  const k = Math.min(Math.max(1, Math.min(2, 1400 / Math.max(sw, sh))), MAX_EDGE / Math.max(sw, sh), Math.sqrt(MAX_PIXELS / (sw * sh)));
+  const w = Math.max(1, Math.round(sw * k)), h = Math.max(1, Math.round(sh * k));
+  const c = document.createElement("canvas"); c.width = w; c.height = h;
+  const g = c.getContext("2d"); g.imageSmoothingQuality = "high";
+  g.drawImage($("shot"), sx, sy, sw, sh, 0, 0, w, h);
+  const url = c.toDataURL("image/jpeg", 0.92), b64 = url.slice(url.indexOf(",") + 1);
+  const t = document.createElement("canvas"); t.width = 128; t.height = Math.max(1, Math.round(128 * h / w));
+  t.getContext("2d").drawImage(c, 0, 0, t.width, t.height);
+  send({ b64, w, h, kb: Math.round(b64.length * 0.75 / 1024), thumb: t.toDataURL("image/jpeg", 0.6), region: true });
 }
 
 /* ───────── 버튼 ───────── */
